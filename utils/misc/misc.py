@@ -30,3 +30,29 @@ def getGenderDistribution(df, ratio, N):
         
     #idx_list = random.shuffle(idx_list)
     return idx_list
+
+# get female lists
+def getFemaleList(df, N):
+    idx_list = [None] * N
+    # Get female idxs
+    idx_female = df.index[df['Gender'] == 'female']
+    
+    for i in np.arange(N):
+        #print(np.mod(i, len(df)))
+        idx_list[i] = df.index[idx_female[np.mod(i, len(idx_female))]]
+        
+    #idx_list = random.shuffle(idx_list)
+    return idx_list
+
+# get male lists
+def getMaleList(df, N):
+    idx_list = [None] * N
+    # Get female idxs
+    idx_male = df.index[df['Gender'] == 'male']
+    
+    for i in np.arange(N):
+        #print(np.mod(i, len(df)))
+        idx_list[i] = df.index[idx_male[np.mod(i, len(idx_male))]]
+        
+    #idx_list = random.shuffle(idx_list)
+    return idx_list

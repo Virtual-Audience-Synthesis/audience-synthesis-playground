@@ -72,6 +72,22 @@ def augmentAudio(audio, sr, noise_factor, shift, shift_direction, pitch_factor, 
     audio = changeSpeed(audio, speed_factor, keep_dim=True)
     return audio
 
+def augmentAudioStereo(audio, alpha, beta, sr, noise_factor, shift, shift_direction, pitch_factor, speed_factor): 
+    # white noise
+    audio = addNoise(audio, noise_factor=noise_factor)
+    # time shift
+    audio = addShift(audio, shift, shift_direction)
+    # change pitch
+    audio = changePitch(audio, sr, pitch_factor)
+    # change speed
+    audio = changeSpeed(audio, speed_factor, keep_dim=True)
+    # create left audio 
+    left = alpha * beta * audio
+    # create right audio 
+    right = (1-alpha) * beta * audio
+    
+    return left, right
+
 
 # create and apply envelope (swell, fade in seconds)
 def createEnvelope(len_signal, sr, swell, fade):
