@@ -58,7 +58,6 @@ def getMaleList(df, N):
     for i in np.arange(N):
         # print(np.mod(i, len(df)))
         idx_list[i] = df.index[idx_male[np.mod(i, len(idx_male))]]
-<<<<<<< HEAD
 
     #idx_list = random.shuffle(idx_list)
     return idx_list
@@ -68,5 +67,3 @@ def slidingWindow(x, window, stride):
     shape = x.shape[:-1] + (math.floor((x.shape[-1] - window) / stride) + 1, window)
     strides = x.strides[:-1] + (x.strides[-1] * stride, x.strides[-1],)
     return np.lib.stride_tricks.as_strided(x, shape=shape, strides=strides)
-=======
->>>>>>> eeb37eadad91fe76da5a0f2052d8d5d194cd390b
