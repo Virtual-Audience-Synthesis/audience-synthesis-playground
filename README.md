@@ -10,7 +10,22 @@ Tailored laughter synthesis
 ```shell
 # Automatically apply code format
 make format
+```
 
+### Virtual Environment
+
+```shell
+# Create venv
+make init_venv
+
+# Install dependencies
+sudo apt install portaudio19-dev python3-pyaudio
+pip3 install -r requirements.txt
+```
+
+### Docker
+
+```shell
 # Build the development environment
 docker-compose build
 
