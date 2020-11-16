@@ -2,6 +2,16 @@ import pandas as pd
 import numpy as np
 import random
 import math
+import os
+from pathlib import Path
+
+
+def change_docker_cwd(target_dir):
+    """Change the current working dir if in docker"""
+    if f"{os.getenv('BASE_DIR')}" == str(Path.cwd()):
+        os.chdir(Path(target_dir))
+        print(f"Running in docker -> Change cwd to {target_dir}")
+
 
 # read csv file as data frame
 def readCSV(path):

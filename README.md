@@ -10,6 +10,12 @@ Tailored laughter synthesis
 ```shell
 # Automatically apply code format
 make format
+
+# Build the development environment
+docker-compose build
+
+# Run the jupyter server
+docker-compose up
 ```
 
 ## Links and Resources
