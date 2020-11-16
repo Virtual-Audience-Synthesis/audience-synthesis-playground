@@ -1,4 +1,11 @@
 black
-matplotlib
 numpy
 librosa
+matplotlib
+numpy
+pandas
+jupyter
+scipy
+scikit-learn
+tqdm
+pyaudio
