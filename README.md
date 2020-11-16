@@ -8,6 +8,9 @@ Tailored laughter synthesis
 ## Development
 
 ```shell
+# Install development requirements
+pip3 install -r requirements/dev.txt
+
 # Automatically apply code format
 make format
 ```

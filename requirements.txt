@@ -1,4 +1,5 @@
-black
+-r requirements/dev.txt
+
 numpy
 librosa
 matplotlib
