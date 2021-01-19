@@ -1,6 +1,5 @@
 .DS_Store
 .vscode
-dashboard/data
 datasets
 
 # Byte-compiled / optimized / DLL files
