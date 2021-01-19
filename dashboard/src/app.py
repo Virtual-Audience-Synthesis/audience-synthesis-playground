@@ -25,7 +25,7 @@ app = dash.Dash(
     update_title=None,
     external_stylesheets=external_stylesheets
 )
-app.title = 'Audio Mixer'
+app.title = 'Laughter Synthesis'
 app.layout = html.Div(
     [
         html.Div(
@@ -192,7 +192,8 @@ app.layout = html.Div(
     Input('soundwave-fig', 'clickData')
 )
 def update_soundwave_fig(clickData):
-    x = np.array_split(audio, len(audio) // sr * 20)
+    bin_size = 20
+    x = np.array_split(audio, len(audio) // sr * bin_size)
     x = list(map(lambda x: np.mean(x), x))
 
     current_x = 0
@@ -225,8 +226,8 @@ def update_soundwave_fig(clickData):
         title_text='Soundwave',
         xaxis=dict(
             title_text='Seconds',
-            tickmode='array',
-            tickvals=[sec for sec in range(len(audio) // sr)],
+            tickvals=[sec for sec in range(0, len(x), bin_size)],
+            ticktext=[sec for sec in range(0, len(x) // bin_size)]
         ),
         yaxis=dict(
             showticklabels=False
