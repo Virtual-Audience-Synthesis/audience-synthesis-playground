@@ -2,11 +2,13 @@ import os
 import dash
 import base64
 import numpy as np
-import plotly.graph_objs as go
+import utils.audio as audio
 from .audio import read_audio
+import plotly.graph_objs as go
 import dash_core_components as dcc
 import dash_html_components as html
-from dash.dependencies import Input, Output
+from dash.dependencies import Input, Output, State
+
 
 audio_path = os.path.join(
     os.path.dirname(
@@ -16,7 +18,13 @@ audio_path = os.path.join(
     'queen.wav'
 )
 encoded_audio = base64.b64encode(open(audio_path, 'rb').read())
-audio, sr = read_audio(audio_path)
+AUDIO, SR = read_audio(audio_path)
+
+
+SOUNDWAVE_BIN_SIZE = 20
+# AUDIO = None
+# SR = 22050
+DURATION_IN_SEC = 10
 
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
@@ -38,24 +46,25 @@ app.layout = html.Div(
                         'textAlign': 'center'
                     }
                 ),
+                
+                # Audio soundwave
                 html.Div(
                     dcc.Graph(
                         id='soundwave-fig',
                         animate=True
                     )
                 ),
+                
+                # Audio
                 html.Audio(
-                    id='player',
+                    id='audio-player',
                     src='data:audio/mpeg;base64,{}'.format(encoded_audio.decode()),
                     controls=True,
                     autoPlay=False,
                     style={'width': '100%'}
                 ),
-
-
-
-
-
+                
+                # Panel
                 html.Table(
                     [
                         html.Tr(
@@ -97,7 +106,7 @@ app.layout = html.Div(
                                 ),
                                 html.Td(
                                     dcc.Slider(
-                                        id='clapping',
+                                        id='clapping-intensity',
                                         min=0,
                                         max=100,
                                         step=0.5,
@@ -120,7 +129,7 @@ app.layout = html.Div(
                                 ),
                                 html.Td(
                                     dcc.Slider(
-                                        id='whistling',
+                                        id='whistling-intensity',
                                         min=0,
                                         max=100,
                                         step=0.5,
@@ -139,7 +148,7 @@ app.layout = html.Div(
                                 ),
                                 html.Td(
                                     dcc.Slider(
-                                        id='laughter',
+                                        id='laughter-intensity',
                                         min=0,
                                         max=100,
                                         step=0.5,
@@ -175,7 +184,10 @@ app.layout = html.Div(
                         )
                     ],
                     style={'width': '100%'}
-                )
+                ),
+                
+                # Spawn button
+                html.Button('Spawn Audio', id='spawn-audio')
             ]
         ),
         dcc.Interval(
@@ -183,7 +195,7 @@ app.layout = html.Div(
             interval=1000*300,
             n_intervals=0
         ),
-    ], style={"fontFamily": "Calibri, sans-serif"}
+    ], style={'fontFamily': 'Calibri, sans-serif'}
 )
 
 
@@ -191,14 +203,86 @@ app.layout = html.Div(
     Output('soundwave-fig', 'figure'),
     Input('soundwave-fig', 'clickData')
 )
-def update_soundwave_fig(clickData):
-    bin_size = 20
-    x = np.array_split(audio, len(audio) // sr * bin_size)
-    x = list(map(lambda x: np.mean(x), x))
+def update_soundwave_fig(clickData:dict) -> go.Figure:
+    '''
+    Updates the soundwave graph in the dashboard. The soundwave is colored as red until the click
+    position and the rest stays blue.
+    
+    Args:
+        clickData (dict): Mouse click data.
+        
+    Returns:
+        plotly.graph_objects.Figure: Updated soundwave figure.
+    '''
+    print(clickData)
 
     current_x = 0
     if clickData is not None:
         current_x = clickData['points'][0]['x']
+        
+    return plot_soundwave(current_x)
+
+
+@app.callback(
+    Output('audio-player', 'src'),
+    Input('spawn-audio', 'n_clicks'),
+    [
+        State('n-person', 'value'),
+        State('female-male-slider', 'value'),
+        State('clapping-intensity', 'value'),
+        State('whistling-intensity', 'value'),
+        State('laughter-intensity', 'value'),
+        State('enthusiasm', 'value')
+    ]
+)
+def spawn_audio(n:int, n_person:int, female_to_male_ratio:float, 
+                clapping_intensity:float, whistling_intensity:float, 
+                laughter_intensity:float, enthusiasm:float) -> np.ndarray:
+    '''
+    Generates an audio based on different modules clapping, whistling, etc.
+    
+    Args:
+        n (int): Number of button clicks. Juat to invoke the function.
+        n_person (int): Number of people.
+        female_to_male_ratio (float): Gender ratio of the people as female / male.
+        clapping_intensity (float): Intensity of clappings as percentage.
+        whistling_intensity (float): Intensity of whistles as percentage.
+        laughter_intensity (float): Intensity of luaghters as percentage.
+        Enthusiasm (float): Enthusiasm percentage.
+        
+    Returns:
+        numpy.ndarray: Audio generated.
+    '''
+    # Check None inputs
+    if (n_person is not None
+        and female_to_male_ratio is not None
+        and clapping_intensity is not None
+        and whistling_intensity is not None
+        and laughter_intensity is not None
+        and enthusiasm is not None):
+        # Spawn clapping
+        clapping = audio.spawnClaps(n_person, SR, DURATION_IN_SEC)
+        
+        # Combine modules
+        AUDIO = clapping
+        
+        # Plot figure
+        update_soundwave_fig(
+            {
+                'points': [
+                    {
+                        'x': 0
+                    }
+                ]
+            }
+        )
+        
+        return 'data:audio/mpeg;base64,{}'.format(base64.b64encode(AUDIO).decode())
+    
+    
+def plot_soundwave(current_x):
+    x = np.array_split(AUDIO, len(AUDIO) // SR * SOUNDWAVE_BIN_SIZE)
+    x = list(map(lambda x: np.mean(x), x))
 
     fig = go.Figure()
     fig.add_trace(
@@ -226,13 +310,14 @@ def update_soundwave_fig(clickData):
         title_text='Soundwave',
         xaxis=dict(
             title_text='Seconds',
-            tickvals=[sec for sec in range(0, len(x), bin_size)],
-            ticktext=[sec for sec in range(0, len(x) // bin_size)]
+            tickvals=[sec for sec in range(0, len(x), SOUNDWAVE_BIN_SIZE)],
+            ticktext=[sec for sec in range(0, len(x) // SOUNDWAVE_BIN_SIZE)]
         ),
         yaxis=dict(
             showticklabels=False
         )
     )
+    
     return fig
 
 
