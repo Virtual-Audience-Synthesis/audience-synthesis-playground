@@ -6,6 +6,7 @@ import utils.audio as audio
 from .audio import read_audio
 import plotly.graph_objs as go
 import dash_core_components as dcc
+import scipy.io.wavfile as wavfile
 import dash_html_components as html
 from dash.dependencies import Input, Output, State
 
@@ -15,7 +16,7 @@ audio_path = os.path.join(
         os.path.dirname(__file__)
     ),
     'data',
-    'queen.wav'
+    'test.wav'
 )
 encoded_audio = base64.b64encode(open(audio_path, 'rb').read())
 AUDIO, SR = read_audio(audio_path)
@@ -192,7 +193,7 @@ app.layout = html.Div(
         ),
         dcc.Interval(
             id='update',
-            interval=1000*300,
+            interval=100*5,
             n_intervals=0
         ),
     ], style={'fontFamily': 'Calibri, sans-serif'}
@@ -201,94 +202,56 @@ app.layout = html.Div(
 
 @app.callback(
     Output('soundwave-fig', 'figure'),
-    Input('soundwave-fig', 'clickData')
+    [
+        Input('spawn-audio', 'n_clicks'),
+        Input('soundwave-fig', 'clickData'),
+    ]
 )
-def update_soundwave_fig(clickData:dict) -> go.Figure:
+def update_soundwave_fig(n:int, clickData:dict) -> go.Figure:
     '''
-    Updates the soundwave graph in the dashboard. The soundwave is colored as red until the click
+    Updates the soundwave figure in the dashboard. The soundwave is colored as red until the click
     position and the rest stays blue.
     
     Args:
+        n (int): Number of button clicks. Just to invoke the function.
         clickData (dict): Mouse click data.
         
     Returns:
         plotly.graph_objects.Figure: Updated soundwave figure.
     '''
-    print(clickData)
-
+    ctx = dash.callback_context
+    input_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
     current_x = 0
-    if clickData is not None:
-        current_x = clickData['points'][0]['x']
-        
-    return plot_soundwave(current_x)
+    if input_id == 'soundwave-fig':
+        current_x = 0
+        if clickData is not None:
+            current_x = clickData['points'][0]['x']
+            
+    fig = plot_soundwave(current_x)
+    
+    return fig
 
 
-@app.callback(
-    Output('audio-player', 'src'),
-    Input('spawn-audio', 'n_clicks'),
-    [
-        State('n-person', 'value'),
-        State('female-male-slider', 'value'),
-        State('clapping-intensity', 'value'),
-        State('whistling-intensity', 'value'),
-        State('laughter-intensity', 'value'),
-        State('enthusiasm', 'value')
-    ]
-)
-def spawn_audio(n:int, n_person:int, female_to_male_ratio:float, 
-                clapping_intensity:float, whistling_intensity:float, 
-                laughter_intensity:float, enthusiasm:float) -> np.ndarray:
+def plot_soundwave(current_x:int) -> go.Figure:
     '''
-    Generates an audio based on different modules clapping, whistling, etc.
+    Plots the soundwave figure for given waveform. The soundwave is colored as red until the click
+    position and the rest stays blue.
     
     Args:
-        n (int): Number of button clicks. Juat to invoke the function.
-        n_person (int): Number of people.
-        female_to_male_ratio (float): Gender ratio of the people as female / male.
-        clapping_intensity (float): Intensity of clappings as percentage.
-        whistling_intensity (float): Intensity of whistles as percentage.
-        laughter_intensity (float): Intensity of luaghters as percentage.
-        Enthusiasm (float): Enthusiasm percentage.
+        current_x (int): Clicked point in the figure.
         
     Returns:
-        numpy.ndarray: Audio generated.
+        plotly.graph_objects.Figure: Soundwave figure.
     '''
-    # Check None inputs
-    if (n_person is not None
-        and female_to_male_ratio is not None
-        and clapping_intensity is not None
-        and whistling_intensity is not None
-        and laughter_intensity is not None
-        and enthusiasm is not None):
-        # Spawn clapping
-        clapping = audio.spawnClaps(n_person, SR, DURATION_IN_SEC)
-        
-        # Combine modules
-        AUDIO = clapping
-        
-        # Plot figure
-        update_soundwave_fig(
-            {
-                'points': [
-                    {
-                        'x': 0
-                    }
-                ]
-            }
-        )
-        
-        return 'data:audio/mpeg;base64,{}'.format(base64.b64encode(AUDIO).decode())
-    
-    
-def plot_soundwave(current_x):
     x = np.array_split(AUDIO, len(AUDIO) // SR * SOUNDWAVE_BIN_SIZE)
     x = list(map(lambda x: np.mean(x), x))
 
     fig = go.Figure()
     fig.add_trace(
         go.Scatter(
-            x=np.arange(current_x),
-            y=x[:current_x],
+            x=np.arange(current_x + 1),
+            y=x[:current_x + 1],
             showlegend=False,
             mode='lines',
             hoverinfo='none',
@@ -321,6 +284,63 @@ def plot_soundwave(current_x):
     return fig
 
 
+@app.callback(
+    Output('audio-player', 'src'),
+    Input('spawn-audio', 'n_clicks'),
+    [
+        State('n-person', 'value'),
+        State('female-male-slider', 'value'),
+        State('clapping-intensity', 'value'),
+        State('whistling-intensity', 'value'),
+        State('laughter-intensity', 'value'),
+        State('enthusiasm', 'value')
+    ]
+)
+def spawn_audio(n:int, n_person:int, female_to_male_ratio:float, 
+                clapping_intensity:float, whistling_intensity:float, 
+                laughter_intensity:float, enthusiasm:float) -> (np.ndarray, go.Figure):
+    '''
+    Generates an audio based on different modules clapping, whistling, etc.
+    
+    Args:
+        n (int): Number of button clicks. Just to invoke the function.
+        n_person (int): Number of people.
+        female_to_male_ratio (float): Gender ratio of the people as female / male.
+        clapping_intensity (float): Intensity of clappings as percentage.
+        whistling_intensity (float): Intensity of whistles as percentage.
+        laughter_intensity (float): Intensity of luaghters as percentage.
+        Enthusiasm (float): Enthusiasm percentage.
+        
+    Returns:
+        numpy.ndarray, plotly.graph_objects.Figure: Audio generated. Updated soundwave figure.
+    '''
+    # Check None inputs
+    if (n_person is not None
+        and female_to_male_ratio is not None
+        and clapping_intensity is not None
+        and whistling_intensity is not None
+        and laughter_intensity is not None
+        and enthusiasm is not None):
+        # Spawn clapping
+        clapping = audio.spawnClaps(n_person, SR, DURATION_IN_SEC)
+        
+        # Combine modules
+        AUDIO = clapping
+        
+        # Save AUDIO for playing
+        location = os.path.join(
+            os.path.dirname(
+                os.path.dirname(__file__)
+            ),
+            'data',
+            'test.wav'
+        )
+        wavfile.write(location, SR, AUDIO.T.astype(np.float32))
+        
+        return 'data:audio/mpeg;base64,{}'.format(
+            base64.b64encode(open(location, 'rb').read()).decode())
+        
+        
 if __name__ == '__main__':
     # TODO: debug=False
     app.run_server(
