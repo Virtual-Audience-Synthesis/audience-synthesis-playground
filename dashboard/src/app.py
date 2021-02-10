@@ -1,31 +1,20 @@
 import os
 import dash
-import base64
+import json
+import queue
 import numpy as np
-import utils.audio as audio
-from .audio import read_audio
+import sounddevice as sd
 import plotly.graph_objs as go
+import utils.audio as utils_audio
 import dash_core_components as dcc
 import scipy.io.wavfile as wavfile
 import dash_html_components as html
 from dash.dependencies import Input, Output, State
 
 
-audio_path = os.path.join(
-    os.path.dirname(
-        os.path.dirname(__file__)
-    ),
-    'data',
-    'test.wav'
-)
-encoded_audio = base64.b64encode(open(audio_path, 'rb').read())
-AUDIO, SR = read_audio(audio_path)
-
-
-SOUNDWAVE_BIN_SIZE = 20
-# AUDIO = None
-# SR = 22050
-DURATION_IN_SEC = 10
+AUDIO_BLOCKSIZE = 20
+SR = 22050
+DURATION_IN_SEC = 5
 
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
@@ -49,20 +38,15 @@ app.layout = html.Div(
                 ),
                 
                 # Audio soundwave
-                html.Div(
-                    dcc.Graph(
-                        id='soundwave-fig',
-                        animate=True
+                dcc.Loading(
+                    id='soundwave-loading',
+                    type='circle',
+                    children=html.Div(
+                        dcc.Graph(
+                            id='soundwave-fig',
+                            animate=True
+                        )
                     )
-                ),
-                
-                # Audio
-                html.Audio(
-                    id='audio-player',
-                    src='data:audio/mpeg;base64,{}'.format(encoded_audio.decode()),
-                    controls=True,
-                    autoPlay=False,
-                    style={'width': '100%'}
                 ),
                 
                 # Panel
@@ -78,6 +62,7 @@ app.layout = html.Div(
                                     dcc.Input(
                                         id='n-person',
                                         type='number',
+                                        value=10,
                                         placeholder='Number of Person',
                                     ),
                                     style={'width': '18%'}
@@ -187,13 +172,21 @@ app.layout = html.Div(
                     style={'width': '100%'}
                 ),
                 
-                # Spawn button
-                html.Button('Spawn Audio', id='spawn-audio')
+                # Spawn audio
+                html.Button('Spawn Audio', id='spawn-audio'),
+                
+                # Start stream button
+                html.Button('Start Stream', id='start-stream'),
+                
+                # Stop stream button
+                html.Button('Stop Stream', id='stop-stream')
             ]
         ),
+        dcc.Store(id='audio', storage_type='session'),
+        dcc.Store(id='stream-counter', storage_type='session'),
         dcc.Interval(
             id='update',
-            interval=100*5,
+            interval=100*10,
             n_intervals=0
         ),
     ], style={'fontFamily': 'Calibri, sans-serif'}
@@ -201,52 +194,106 @@ app.layout = html.Div(
 
 
 @app.callback(
-    Output('soundwave-fig', 'figure'),
+    Output('audio', 'data'),
+    Input('spawn-audio', 'n_clicks'),
     [
-        Input('spawn-audio', 'n_clicks'),
-        Input('soundwave-fig', 'clickData'),
+        State('n-person', 'value'),
+        State('female-male-slider', 'value'),
+        State('clapping-intensity', 'value'),
+        State('whistling-intensity', 'value'),
+        State('laughter-intensity', 'value'),
+        State('enthusiasm', 'value')
     ]
 )
-def update_soundwave_fig(n:int, clickData:dict) -> go.Figure:
-    '''
-    Updates the soundwave figure in the dashboard. The soundwave is colored as red until the click
-    position and the rest stays blue.
+def update_audio(n_clicks:int, n_person:int, female_to_male_ratio:float, 
+                clapping_intensity:float, whistling_intensity:float, 
+                laughter_intensity:float, enthusiasm:float):
+    # Spawn clapping
+    clapping = utils_audio.spawnClaps(n_person, SR, DURATION_IN_SEC)
     
-    Args:
-        n (int): Number of button clicks. Just to invoke the function.
-        clickData (dict): Mouse click data.
-        
-    Returns:
-        plotly.graph_objects.Figure: Updated soundwave figure.
-    '''
+    # Combine modules
+    audio = clapping
+    
+    return audio.T
+
+
+@app.callback(
+    Output('soundwave-fig', 'figure'),
+    [
+        Input('audio', 'data'),
+        Input('stream-counter', 'data'),
+        Input('start-stream', 'n_clicks'),
+    ]
+)
+def update_figure(audio:str, stream_counter:int, start_stream_click:int):
     ctx = dash.callback_context
     input_id = ctx.triggered[0]['prop_id'].split('.')[0]
     
-    current_x = 0
-    if input_id == 'soundwave-fig':
-        current_x = 0
-        if clickData is not None:
-            current_x = clickData['points'][0]['x']
-            
-    fig = plot_soundwave(current_x)
-    
-    return fig
-
-
-def plot_soundwave(current_x:int) -> go.Figure:
-    '''
-    Plots the soundwave figure for given waveform. The soundwave is colored as red until the click
-    position and the rest stays blue.
-    
-    Args:
-        current_x (int): Clicked point in the figure.
+    if input_id == 'audio':
+        return plot_soundwave(audio, 0)
+    elif input_id == 'stream-counter':
+        return plot_soundwave(audio, stream_counter / SR * AUDIO_BLOCKSIZE)
+    elif input_id == 'start-stream':
+        def callback(outdata, frames, time, status):
+            if status:
+                print(status)
+                
+            try:
+                data = q.get_nowait()
+            except queue.Empty:
+                print('Buffer is empty: increase buffersize?')
+                raise sd.CallbackAbort
+            if len(data) < len(outdata):
+                outdata[:len(data)] = data
+                outdata[len(data):] = b'\x00' * (len(outdata) - len(data))
+                raise sd.CallbackStop
+            else:
+                outdata[:] = data
         
-    Returns:
-        plotly.graph_objects.Figure: Soundwave figure.
-    '''
-    x = np.array_split(AUDIO, len(AUDIO) // SR * SOUNDWAVE_BIN_SIZE)
-    x = list(map(lambda x: np.mean(x), x))
+        fig = plot_soundwave(audio, stream_counter / SR * AUDIO_BLOCKSIZE)
+        
+        q = queue.Queue(maxsize=AUDIO_BLOCKSIZE)
 
+        stream = sd.OutputStream(
+            samplerate=SR, 
+            channels=2, 
+            callback=callback, 
+            blocksize=AUDIO_BLOCKSIZE,
+            dtype='float32'
+        )
+
+        with stream:
+            data = audio[stream_counter:stream_counter + AUDIO_BLOCKSIZE]
+            while len(data) != 0:
+                stream_counter += AUDIO_BLOCKSIZE
+                q.put(data)
+                data = audio[stream_counter:stream_counter + AUDIO_BLOCKSIZE]
+                
+        return fig
+
+
+@app.callback(
+    Output('stream-counter', 'data'),
+    [
+        Input('soundwave-fig', 'clickData'),
+        Input('stop-stream', 'n_clicks')
+    ]
+)
+def update_stream_counter(clickData:dict, n_clicks:str):
+    stream_counter = 0
+    if clickData is not None:
+        stream_counter = clickData['points'][0]['x'] / AUDIO_BLOCKSIZE * SR
+        
+    return stream_counter
+
+
+def plot_soundwave(audio:np.ndarray, current_x:int) -> go.Figure:
+    x = np.array(audio).mean(axis=1)
+    x = np.array_split(x, len(x) // SR * AUDIO_BLOCKSIZE)
+    x = list(map(lambda x: np.mean(x), x))
+    
+    current_x = int(current_x)
+    
     fig = go.Figure()
     fig.add_trace(
         go.Scatter(
@@ -258,25 +305,43 @@ def plot_soundwave(current_x:int) -> go.Figure:
             marker={'color': 'red'}
         )
     )
-    fig.add_trace(
-        go.Scatter(
-            x=np.arange(current_x, len(x)),
-            y=x[current_x:],
-            showlegend=False,
-            mode='lines',
-            hoverinfo='none',
-            marker={'color': 'blue'}
+    if current_x + 1 < len(x):
+        fig.add_trace(
+            go.Scatter(
+                x=np.arange(current_x, len(x)),
+                y=x[current_x:],
+                showlegend=False,
+                mode='lines',
+                hoverinfo='none',
+                marker={'color': 'blue'}
+            )
+        )
+    
+    fig.add_shape(
+        type='line',
+        x0=current_x, y0=min(x) * (1 - (0.05 * min(x) / abs(min(x)))), 
+        x1=current_x, y1=max(x) * (1 + (0.05 * max(x) / abs(max(x)))),
+        line=dict(
+            width=3
         )
     )
-
+    
     fig.update_layout(
         title_text='Soundwave',
         xaxis=dict(
             title_text='Seconds',
-            tickvals=[sec for sec in range(0, len(x), SOUNDWAVE_BIN_SIZE)],
-            ticktext=[sec for sec in range(0, len(x) // SOUNDWAVE_BIN_SIZE)]
+            range=[
+                0, 
+                len(x)
+            ],
+            tickvals=[sec for sec in range(0, len(x) + 1, AUDIO_BLOCKSIZE)],
+            ticktext=[sec for sec in range(0, (len(x) // AUDIO_BLOCKSIZE) + 1)]
         ),
         yaxis=dict(
+            range=[
+                min(x) * (1 - (0.1 * min(x) / abs(min(x)))), 
+                max(x) * (1 + (0.1 * max(x) / abs(max(x))))
+            ],
             showticklabels=False
         )
     )
@@ -284,63 +349,12 @@ def plot_soundwave(current_x:int) -> go.Figure:
     return fig
 
 
-@app.callback(
-    Output('audio-player', 'src'),
-    Input('spawn-audio', 'n_clicks'),
-    [
-        State('n-person', 'value'),
-        State('female-male-slider', 'value'),
-        State('clapping-intensity', 'value'),
-        State('whistling-intensity', 'value'),
-        State('laughter-intensity', 'value'),
-        State('enthusiasm', 'value')
-    ]
-)
-def spawn_audio(n:int, n_person:int, female_to_male_ratio:float, 
-                clapping_intensity:float, whistling_intensity:float, 
-                laughter_intensity:float, enthusiasm:float) -> (np.ndarray, go.Figure):
-    '''
-    Generates an audio based on different modules clapping, whistling, etc.
+# def stop_stream(n_clicks:int):
+#     global STREAM
     
-    Args:
-        n (int): Number of button clicks. Just to invoke the function.
-        n_person (int): Number of people.
-        female_to_male_ratio (float): Gender ratio of the people as female / male.
-        clapping_intensity (float): Intensity of clappings as percentage.
-        whistling_intensity (float): Intensity of whistles as percentage.
-        laughter_intensity (float): Intensity of luaghters as percentage.
-        Enthusiasm (float): Enthusiasm percentage.
-        
-    Returns:
-        numpy.ndarray, plotly.graph_objects.Figure: Audio generated. Updated soundwave figure.
-    '''
-    # Check None inputs
-    if (n_person is not None
-        and female_to_male_ratio is not None
-        and clapping_intensity is not None
-        and whistling_intensity is not None
-        and laughter_intensity is not None
-        and enthusiasm is not None):
-        # Spawn clapping
-        clapping = audio.spawnClaps(n_person, SR, DURATION_IN_SEC)
-        
-        # Combine modules
-        AUDIO = clapping
-        
-        # Save AUDIO for playing
-        location = os.path.join(
-            os.path.dirname(
-                os.path.dirname(__file__)
-            ),
-            'data',
-            'test.wav'
-        )
-        wavfile.write(location, SR, AUDIO.T.astype(np.float32))
-        
-        return 'data:audio/mpeg;base64,{}'.format(
-            base64.b64encode(open(location, 'rb').read()).decode())
-        
-        
+#     STREAM.stop()
+    
+    
 if __name__ == '__main__':
     # TODO: debug=False
     app.run_server(
