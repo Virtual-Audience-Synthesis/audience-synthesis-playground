@@ -4,11 +4,66 @@ import IPython.display as ipd
 import os
 from tqdm import tqdm
 import noisereduce as nr
+import random
 import sys
 
 if '../../' not in sys.path: sys.path.insert(1, "../../")
+    
 from utils import audio, misc, plots, whistle, clap
 import pdb
+
+def spawnLaughter(n_person, ratio_female, stereo=True, fs=22050, t_len=10):
+    """Spawn audio from pre-recorded laughter files of 10 secs, and fs, SR=22050
+    TODO: Adapt length of audio if t_len is set
+    TODO: Adapt fs of audio if fs is set
+    TODO: Return audio and sampling rate SR, fs
+    Make sure full_audio/female_audios and full_audio/male_audios are provided 
+    
+    Args:
+        n_person (int): Number of persons laughing
+        ratio_female (float): Ratio of female persons in percent (0.0-1.0)
+        stereo (boolean): Synthesize stereo audio if true, mono if false
+        fs (int): Sampling rate of audio
+        t_len (float): Seconds of audio recording
+
+    Returns:
+        numpy.ndarray: (1, int(t_len*fs)) if mono else (2, int(t_len*fs))
+
+    """
+    # load (fe)male audio sequences without alpha, beta 
+    female_audios = np.load("female_audios/female_audios_500.npy")
+    male_audios = np.load("male_audios/male_audios_500.npy")
+
+    N = 200
+    ratio = 0.5
+    n_male = int(ratio * N)
+    n_female = N - n_male
+    
+    # get male indices and audio signals
+    male_idx = np.random.choice(male_audios.shape[0], n_male)
+    males = [male_audios[i] for i in male_idx]
+
+    # get female indices and audio signals
+    female_idx = np.random.choice(female_audios.shape[0], n_female)
+    females = [female_audios[i] for i in female_idx]
+
+    # create list for beta fallof
+    beta=np.reciprocal(np.sqrt(np.arange(1, N+1)))
+    # concatenate both lists and shuffle
+    mixed_audio = np.array(random.sample(males+females, N))
+    if stereo:
+        # create list of alpha values for stereo
+        alpha=np.random.rand(N)
+        # synthesize left audio
+        left_audio = N * alpha[:, np.newaxis] * beta[:, np.newaxis] * mixed_audio
+        # synthesize right audio
+        right_audio = N * (1-alpha[:, np.newaxis]) * beta[:, np.newaxis] * mixed_audio
+        # concatenate and compute mean
+        audio = np.array([left_audio.mean(0), right_audio.mean(0)])
+    else:
+        audio = beta[:, np.newaxis] * mixed_audio 
+    
+    return audio
 
 # create whistles 
 def spawnWhistles(fs, t_len=1, can_radius = 200, pea_radius = 5, 
