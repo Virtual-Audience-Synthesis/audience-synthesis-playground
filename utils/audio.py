@@ -15,16 +15,24 @@ def spawnWhistles(fs, t_len=1, can_radius = 200, pea_radius = 5,
                  bump_radius = 160, norm_can_loss = .97, gravity = 15.0, 
                  norm_tick_size = 0.004, env_rate = 0.001, sample_rate=44100, 
                  fipple_freq_mod = .25, fipple_gain_mod = .5, blow_freq_mod = .2,
-                 noise_gain = .3, base_freq = 3000, sine_rate = 2600, pole = .95):
+                 noise_gain = .3, base_freq = 3000, sine_rate = 2600, pole = .95, 
+                 load=True, load_path=None):
+    if load:
+        assert load_path is not None, 'Load path must be defined!'
+    
     whistle_len = int(t_len * fs)
     output = np.zeros(whistle_len)
-    w = whistle.Whistle(can_radius=can_radius, pea_radius=pea_radius, bump_radius=bump_radius, norm_can_loss=norm_can_loss, 
-            gravity=gravity, norm_tick_size=norm_tick_size, env_rate=env_rate, sample_rate=sample_rate,
-            fipple_freq_mod=fipple_freq_mod, fipple_gain_mod=fipple_gain_mod, blow_freq_mod=blow_freq_mod, noise_gain=noise_gain,
-            base_freq=base_freq, sine_rate=sine_rate, pole=pole)
-    for i in range(whistle_len):
-        w.tick()
-        output[i] = w.last_frame
+    if not load:
+        w = whistle.Whistle(can_radius=can_radius, pea_radius=pea_radius, bump_radius=bump_radius, norm_can_loss=norm_can_loss, 
+                gravity=gravity, norm_tick_size=norm_tick_size, env_rate=env_rate, sample_rate=sample_rate,
+                fipple_freq_mod=fipple_freq_mod, fipple_gain_mod=fipple_gain_mod, blow_freq_mod=blow_freq_mod, noise_gain=noise_gain,
+                base_freq=base_freq, sine_rate=sine_rate, pole=pole)
+        for i in range(whistle_len):
+            w.tick()
+            output[i] = w.last_frame
+    else:
+        # TODO: load
+        output = loadAudio(load_path, sr=44100)[0]
     
     return output
 
