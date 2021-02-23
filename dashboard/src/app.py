@@ -12,8 +12,8 @@ import dash_html_components as html
 from dash.dependencies import Input, Output, State
 
 
-AUDIO_BLOCKSIZE = 20
-SR = 22050
+AUDIO_BLOCKSIZE = 50
+SR = 44100
 DURATION_IN_SEC = 5
 
 
@@ -182,7 +182,7 @@ app.layout = html.Div(
                 html.Button('Stop Stream', id='stop-stream')
             ]
         ),
-        dcc.Store(id='audio', storage_type='session'),
+        dcc.Store(id='audio'),
         dcc.Store(id='stream-counter', storage_type='session'),
         dcc.Interval(
             id='update',
@@ -208,11 +208,41 @@ app.layout = html.Div(
 def update_audio(n_clicks:int, n_person:int, female_to_male_ratio:float, 
                 clapping_intensity:float, whistling_intensity:float, 
                 laughter_intensity:float, enthusiasm:float):
-    # Spawn clapping
-    clapping = utils_audio.spawnClaps(n_person, SR, DURATION_IN_SEC)
+    # Spawn claps
+    claps = utils_audio.spawnClaps(n_person, SR, DURATION_IN_SEC)
     
+    # Spawn whistles
+    root_whistle = utils_audio.spawnWhistles(
+        SR, 
+        can_radius=200, 
+        pea_radius=50, 
+        bump_radius=150, 
+        fipple_freq_mod=.35, 
+        fipple_gain_mod=.35, 
+        noise_gain=.2, 
+        base_freq=5000, 
+        sine_rate=4000, 
+        pole=.95, 
+        norm_can_loss=.97,
+        load=True, 
+        load_path=os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            'data', 
+            'whistle.wav'
+        )
+    )
+    
+    whistles = np.zeros_like(claps)
+    n_person_whistling = int(n_person * whistling_intensity / 100)
+    for _ in range(n_person_whistling):
+        start = int(np.random.uniform(0, DURATION_IN_SEC - 1) * SR)
+        direction = np.random.randint(0, 2)
+        whistle = utils_audio.changePitch(root_whistle, SR, np.random.uniform(-3, 3))
+        
+        whistles[direction, start:start + len(whistle)] += whistle
+        
     # Combine modules
-    audio = clapping
+    audio = claps + (whistles * 200)
     
     return audio.T
 
@@ -269,9 +299,7 @@ def update_figure(audio:str, stream_counter:int, start_stream_click:int):
                 q.put(data)
                 data = audio[stream_counter:stream_counter + AUDIO_BLOCKSIZE]
                 
-        return fig
-
-
+                
 @app.callback(
     Output('stream-counter', 'data'),
     [
