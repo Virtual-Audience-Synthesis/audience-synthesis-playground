@@ -12,7 +12,8 @@ if '../../' not in sys.path: sys.path.insert(1, "../../")
 from utils import audio, misc, plots, whistle, clap
 import pdb
 
-def spawnLaughter(n_person, ratio_female, stereo=True, fs=22050, t_len=10):
+def spawnLaughter(n_person, ratio_female, female_laughter_path, male_laughter_path, stereo=True, 
+                  fs=22050, t_len=10):
     """Spawn audio from pre-recorded laughter files of 10 secs, and fs, SR=22050
     TODO: Adapt length of audio if t_len is set
     TODO: Adapt fs of audio if fs is set
@@ -31,13 +32,11 @@ def spawnLaughter(n_person, ratio_female, stereo=True, fs=22050, t_len=10):
 
     """
     # load (fe)male audio sequences without alpha, beta 
-    female_audios = np.load("female_audios/female_audios_500.npy")
-    male_audios = np.load("male_audios/male_audios_500.npy")
+    female_audios = np.load(female_laughter_path)
+    male_audios = np.load(male_laughter_path)
 
-    N = 200
-    ratio = 0.5
-    n_male = int(ratio * N)
-    n_female = N - n_male
+    n_female = int(n_person * ratio_female)
+    n_male = n_person - n_female
     
     # get male indices and audio signals
     male_idx = np.random.choice(male_audios.shape[0], n_male)
@@ -48,16 +47,16 @@ def spawnLaughter(n_person, ratio_female, stereo=True, fs=22050, t_len=10):
     females = [female_audios[i] for i in female_idx]
 
     # create list for beta fallof
-    beta=np.reciprocal(np.sqrt(np.arange(1, N+1)))
+    beta=np.reciprocal(np.sqrt(np.arange(1, n_person+1)))
     # concatenate both lists and shuffle
-    mixed_audio = np.array(random.sample(males+females, N))
+    mixed_audio = np.array(random.sample(males+females, n_person))
     if stereo:
         # create list of alpha values for stereo
-        alpha=np.random.rand(N)
+        alpha=np.random.rand(n_person)
         # synthesize left audio
-        left_audio = N * alpha[:, np.newaxis] * beta[:, np.newaxis] * mixed_audio
+        left_audio = n_person * alpha[:, np.newaxis] * beta[:, np.newaxis] * mixed_audio
         # synthesize right audio
-        right_audio = N * (1-alpha[:, np.newaxis]) * beta[:, np.newaxis] * mixed_audio
+        right_audio = n_person * (1-alpha[:, np.newaxis]) * beta[:, np.newaxis] * mixed_audio
         # concatenate and compute mean
         audio = np.array([left_audio.mean(0), right_audio.mean(0)])
     else:
