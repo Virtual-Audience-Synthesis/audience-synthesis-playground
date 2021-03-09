@@ -3,6 +3,7 @@ import dash
 import json
 import queue
 import numpy as np
+from scipy import signal
 import sounddevice as sd
 import plotly.graph_objs as go
 import utils.audio as utils_audio
@@ -14,7 +15,7 @@ from dash.dependencies import Input, Output, State
 
 AUDIO_BLOCKSIZE = 50
 SR = 44100
-DURATION_IN_SEC = 5
+DURATION_IN_SEC = 10
 
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
@@ -23,13 +24,13 @@ app = dash.Dash(
     update_title=None,
     external_stylesheets=external_stylesheets
 )
-app.title = 'Laughter Synthesis'
+app.title = 'Audio Synthesis'
 app.layout = html.Div(
     [
         html.Div(
             className='container-fluid',
             children=[
-                html.H1(
+                html.H3(
                     app.title,
                     style={
                         'color': '#CECECE',
@@ -45,7 +46,8 @@ app.layout = html.Div(
                         dcc.Graph(
                             id='soundwave-fig',
                             animate=True
-                        )
+                        ),
+                        style={'height': '200px'}
                     )
                 ),
                 
@@ -63,13 +65,13 @@ app.layout = html.Div(
                                         id='n-person',
                                         type='number',
                                         value=10,
-                                        placeholder='Number of Person',
+                                        placeholder='Number of Person'
                                     ),
                                     style={'width': '15%'}
                                 ),
                                 html.Td(
-                                    html.H5('Female Ratio'),
-                                    style={'width': '10%'}
+                                    html.H5('Female Percentage'),
+                                    style={'width': '15%'}
                                 ),
                                 html.Td(
                                     dcc.Slider(
@@ -80,8 +82,10 @@ app.layout = html.Div(
                                         value=50,
                                         marks={
                                             0: '0',
-                                            50: '50',
                                             100: '100'
+                                        },
+                                        tooltip={
+                                            'always_visible': True
                                         }
                                     ),
                                     style={'width': '25%'}
@@ -89,17 +93,17 @@ app.layout = html.Div(
                                 html.Td(
                                     # Spawn audio
                                     html.Button('Spawn Audio', id='spawn-audio'),
-                                    style={'width': '12%'}
+                                    style={'width': '10%'}
                                 ),
                                 html.Td(
                                     # Start stream button
                                     html.Button('Start Stream', id='start-stream'),
-                                    style={'width': '12%'}
+                                    style={'width': '10%'}
                                 ),
                                 html.Td(
                                     # Stop stream button
                                     html.Button('Stop Stream', id='stop-stream'),
-                                    style={'width': '12%'}
+                                    style={'width': '10%'}
                                 )
                             ]
                         )
@@ -113,147 +117,129 @@ app.layout = html.Div(
                         html.Tr(
                             [
                                 html.Td(
-                                    html.H5('Clapping Intensity'),
-                                    style={'width': '15%'}
-                                ),
-                                html.Td(
-                                    dcc.Slider(
-                                        id='clapping-intensity',
-                                        min=0,
-                                        max=100,
-                                        step=0.5,
-                                        value=50,
-                                        marks={
-                                            0: '0',
-                                            50: '50',
-                                            100: '100'
-                                        }
-                                    ),
-                                    style={'width': '25%'}
-                                ),
-                                html.Td(
-                                    dcc.Loading(
-                                        id='clapping-loading',
-                                        type='circle',
-                                        children=html.Div(
-                                            dcc.Graph(
-                                                id='claps-fig',
-                                                animate=True
+                                    [
+                                        dcc.Loading(
+                                            id='clapping-loading',
+                                            type='circle',
+                                            children=html.Div(
+                                                dcc.Graph(
+                                                    id='claps-fig',
+                                                    animate=True
+                                                )
                                             )
+                                        ),
+                                        dcc.Slider(
+                                            id='clapping-intensity',
+                                            min=0,
+                                            max=100,
+                                            step=0.5,
+                                            value=50,
+                                            marks={
+                                                0: '0',
+                                                100: '100 '
+                                            },
+                                            tooltip={
+                                                'always_visible': True
+                                            }
                                         )
-                                    ),
-                                    style={'width': '60%'}
+                                    ],
+                                    style={'width': '50%'}
+                                ),
+                                html.Td(
+                                    [
+                                        dcc.Loading(
+                                            id='whistling-loading',
+                                            type='circle',
+                                            children=html.Div(
+                                                dcc.Graph(
+                                                    id='whistles-fig',
+                                                    animate=True
+                                                )
+                                            )
+                                        ),
+                                        dcc.Slider(
+                                            id='whistling-intensity',
+                                            min=0,
+                                            max=100,
+                                            step=0.5,
+                                            value=50,
+                                            marks={
+                                                0: '0',
+                                                100: '100'
+                                            },
+                                            tooltip={
+                                                'always_visible': True
+                                            }
+                                        )
+                                    ],
+                                    style={'width': '50%'}
                                 )
-                            ]
+                            ],
+                            style={'height': '160px'}
                         ),
                         html.Tr(
                             [
                                 html.Td(
-                                    html.H5('Whistling Intensity'),
-                                    style={'width': '15%'}
-                                ),
-                                html.Td(
-                                    dcc.Slider(
-                                        id='whistling-intensity',
-                                        min=0,
-                                        max=100,
-                                        step=0.5,
-                                        value=50,
-                                        marks={
-                                            0: '0',
-                                            50: '50',
-                                            100: '100'
-                                        }
-                                    ),
-                                    style={'width': '25%'}
-                                ),
-                                html.Td(
-                                    dcc.Loading(
-                                        id='whistling-loading',
-                                        type='circle',
-                                        children=html.Div(
-                                            dcc.Graph(
-                                                id='whistles-fig',
-                                                animate=True
+                                    [
+                                        dcc.Loading(
+                                            id='laughter-loading',
+                                            type='circle',
+                                            children=html.Div(
+                                                dcc.Graph(
+                                                    id='laughters-fig',
+                                                    animate=True
+                                                )
                                             )
+                                        ),
+                                        dcc.Slider(
+                                            id='laughter-intensity',
+                                            min=0,
+                                            max=100,
+                                            step=0.5,
+                                            value=50,
+                                            marks={
+                                                0: '0',
+                                                100: '100'
+                                            },
+                                            tooltip={
+                                                'always_visible': True
+                                            }
                                         )
-                                    ),
-                                    style={'width': '60%'}
+                                    ],
+                                    style={'width': '50%'}
+                                ),
+                                html.Td(
+                                    [
+                                        dcc.Loading(
+                                            id='booing-loading',
+                                            type='circle',
+                                            children=html.Div(
+                                                dcc.Graph(
+                                                    id='boos-fig',
+                                                    animate=True
+                                                )
+                                            )
+                                        ),
+                                        dcc.Slider(
+                                            id='booing-intensity',
+                                            min=0,
+                                            max=100,
+                                            step=0.5,
+                                            value=50,
+                                            marks={
+                                                0: '0',
+                                                100: '100'
+                                            },
+                                            tooltip={
+                                                'always_visible': True
+                                            }
+                                        )
+                                    ],
+                                    style={'width': '50%'}
                                 )
-                            ]
+                            ],
+                            style={'height': '160px'}
                         ),
-                        html.Tr(
-                            [
-                                html.Td(
-                                    html.H5('Laughter Intensity'),
-                                    style={'width': '15%'}
-                                ),
-                                html.Td(
-                                    dcc.Slider(
-                                        id='laughter-intensity',
-                                        min=0,
-                                        max=100,
-                                        step=0.5,
-                                        value=50,
-                                        marks={
-                                            0: '0',
-                                            50: '50',
-                                            100: '100'
-                                        }
-                                    ),
-                                    style={'width': '25%'}
-                                ),
-                                html.Td(
-                                    dcc.Loading(
-                                        id='laughter-loading',
-                                        type='circle',
-                                        children=html.Div(
-                                            dcc.Graph(
-                                                id='laughters-fig',
-                                                animate=True
-                                            )
-                                        )
-                                    ),
-                                    style={'width': '60%'}
-                                )
-                            ]
-                        ),
-                        html.Tr(
-                            [
-                                html.Td(
-                                    html.H5('Booing Intensity'),
-                                    style={'width': '15%'}
-                                ),
-                                html.Td(
-                                    dcc.Slider(
-                                        id='booing-intensity',
-                                        min=0,
-                                        max=100,
-                                        step=0.5,
-                                        value=50,
-                                        marks={
-                                            0: '0',
-                                            50: '50',
-                                            100: '100'
-                                        }
-                                    ),
-                                    style={'width': '25%'}
-                                ),
-                                html.Td(
-                                    dcc.Loading(
-                                        id='booing-loading',
-                                        type='circle',
-                                        children=html.Div(
-                                            dcc.Graph(
-                                                id='boos-fig',
-                                                animate=True
-                                            )
-                                        )
-                                    ),
-                                    style={'width': '60%'}
-                                )
-                            ]
-                        )
                     ],
                     style={'width': '100%'}
                 ),
@@ -270,7 +256,10 @@ app.layout = html.Div(
             interval=100*10,
             n_intervals=0
         ),
-    ], style={'fontFamily': 'Calibri, sans-serif'}
+    ], style={
+        'fontFamily': 'Calibri, sans-serif',
+        'fontSize': '16'
+    }
 )
 
 
@@ -301,6 +290,8 @@ def update_audio(n_clicks:int, n_person:int, female_ratio:float,
     # Spawn Claps
     n_person_clapping = int(n_person * clapping_intensity / 100)
     claps = utils_audio.spawnClaps(n_person_clapping, SR, DURATION_IN_SEC)
+    
+    claps = min_max_normalize(claps)
     #####
     
     # Spawn Whistles
@@ -333,11 +324,38 @@ def update_audio(n_clicks:int, n_person:int, female_ratio:float,
         
         whistles[direction, start:start + len(whistle)] += whistle
         
-    whistles *= 200
+    whistles = min_max_normalize(whistles)
     #####
     
     # Spawn Laughters
-    laughters = np.random.randn(*claps.shape) #TODO
+    n_person_laughing = int(n_person * laughter_intensity / 100)
+    laughters = utils_audio.spawnLaughter(
+        n_person=n_person_laughing, 
+        ratio_female=(female_ratio / 100), 
+        female_laughter_path=os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            'data', 
+            'female_laughter.npy'
+        ), 
+        male_laughter_path=os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            'data', 
+            'male_laughter.npy'
+        ), 
+        stereo=True, 
+        fs=SR, #BUG Not working, it uses 22050 default
+        t_len=DURATION_IN_SEC #BUG Not working, it uses 10 default
+    )
+    
+    laughters_resampled = np.array(
+        [
+            signal.resample(laughters[0], SR * DURATION_IN_SEC),
+            signal.resample(laughters[1], SR * DURATION_IN_SEC)
+        ]
+    )
+    
+    laughters_resampled = min_max_normalize(laughters_resampled)
+    #####
     
     # Spawn Female Boos
     root_female_boo, root_female_boo_sr = utils_audio.loadAudio(
@@ -346,7 +364,7 @@ def update_audio(n_clicks:int, n_person:int, female_ratio:float,
             'data', 
             'female_boo.m4a'
         ),
-        sr=44100
+        sr=SR
     )
     root_female_boo = root_female_boo[118000:-107000] # Manual cropping
     
@@ -359,7 +377,7 @@ def update_audio(n_clicks:int, n_person:int, female_ratio:float,
 
         female_boos[direction, start:start + len(boo)] += boo
         
-    female_boos *= 4000
+    female_boos = min_max_normalize(female_boos)
     #####
     
     # Spawn Male Boos
@@ -369,7 +387,7 @@ def update_audio(n_clicks:int, n_person:int, female_ratio:float,
             'data', 
             'male_boo.mp3'
         ),
-        sr=44100
+        sr=SR
     )
     
     male_boos = np.zeros_like(claps)
@@ -381,7 +399,7 @@ def update_audio(n_clicks:int, n_person:int, female_ratio:float,
 
         male_boos[direction, start:start + len(boo)] += boo
         
-    male_boos *= 100
+    male_boos = min_max_normalize(male_boos)
     #####
     
     # Combine Boos
@@ -391,12 +409,12 @@ def update_audio(n_clicks:int, n_person:int, female_ratio:float,
     audio = (
         claps
         + whistles
-        # + laughters
+        + laughters_resampled
         + boos
     )
     #####
     
-    return claps.T, whistles.T, laughters.T, boos.T, audio.T
+    return claps.T, whistles.T, laughters_resampled.T, boos.T, audio.T
 
 
 @app.callback(
@@ -459,7 +477,7 @@ def update_figure(audio:str, stream_counter:int, start_stream_click:int):
     Input('claps', 'data')
 )
 def update_claps_figure(claps:np.ndarray):
-    return plot_soundwave(claps, 0, 'Claps Soundwave')
+    return plot_soundwave(claps, 0, 'Clap Intensity Percentage')
 
 
 @app.callback(
@@ -467,7 +485,7 @@ def update_claps_figure(claps:np.ndarray):
     Input('whistles', 'data')
 )
 def update_whistles_figure(whistles:np.ndarray):
-    return plot_soundwave(whistles, 0, 'Whistles Soundwave')
+    return plot_soundwave(whistles, 0, 'Whistle Intensity Percentage')
 
 
 @app.callback(
@@ -475,7 +493,7 @@ def update_whistles_figure(whistles:np.ndarray):
     Input('laughters', 'data')
 )
 def update_laughters_figure(laughters:np.ndarray):
-    return plot_soundwave(laughters, 0, 'Laughters Soundwave')
+    return plot_soundwave(laughters, 0, 'Laughter Intensity Percentage')
 
 
 @app.callback(
@@ -483,7 +501,7 @@ def update_laughters_figure(laughters:np.ndarray):
     Input('boos', 'data')
 )
 def update_boos_figure(boos:np.ndarray):
-    return plot_soundwave(boos, 0, 'Boos Soundwave')
+    return plot_soundwave(boos, 0, 'Boo Intensity Percentage')
 
 
 @app.callback(
@@ -499,6 +517,10 @@ def update_stream_counter(clickData:dict, n_clicks:str):
         stream_counter = clickData['points'][0]['x'] / AUDIO_BLOCKSIZE * SR
         
     return stream_counter
+
+
+def min_max_normalize(arr):
+    return (arr - np.min(arr)) / (np.max(arr) - np.min(arr))
 
 
 def plot_soundwave(audio:np.ndarray, current_x:int, title:str) -> go.Figure:
@@ -536,8 +558,8 @@ def plot_soundwave(audio:np.ndarray, current_x:int, title:str) -> go.Figure:
     if title == 'Soundwave':
         fig.add_shape(
             type='line',
-            x0=current_x, y0=min(x) * (1 - (0.05 * min(x) / abs(min(x) + eps))), 
-            x1=current_x, y1=max(x) * (1 + (0.05 * max(x) / abs(max(x) + eps))),
+            x0=current_x, y0=min(x) * (1 - (0.0005 * min(x) / abs(min(x) + eps))), 
+            x1=current_x, y1=max(x) * (1 + (0.0005 * max(x) / abs(max(x) + eps))),
             line=dict(
                 width=3
             )
@@ -545,8 +567,9 @@ def plot_soundwave(audio:np.ndarray, current_x:int, title:str) -> go.Figure:
     
     fig.update_layout(
         title_text=title,
+        height=200 if title == 'Soundwave' else 160,
+        title_x=0.5,
         xaxis=dict(
-            title_text='Seconds',
             range=[
                 0, 
                 len(x)
@@ -556,10 +579,17 @@ def plot_soundwave(audio:np.ndarray, current_x:int, title:str) -> go.Figure:
         ),
         yaxis=dict(
             range=[
-                min(x) * (1 - (0.1 * min(x) / abs(min(x) + eps))), 
-                max(x) * (1 + (0.1 * max(x) / abs(max(x) + eps)))
+                min(x) * (1 - (0.001 * min(x) / abs(min(x) + eps))), 
+                max(x) * (1 + (0.001 * max(x) / abs(max(x) + eps)))
             ],
             showticklabels=False
+        ),
+        margin=dict(
+            l=10,
+            r=10,
+            b=50,
+            t=0 if title == 'Soundwave' else 25,
+            pad=0
         )
     )
     
