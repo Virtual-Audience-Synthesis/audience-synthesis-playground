@@ -57,7 +57,7 @@ app.layout = html.Div(
                         html.Tr(
                             [
                                 html.Td(
-                                    html.H5('Number of Person'),
+                                    html.H5('Number of Persons'),
                                     style={'width': '15%'}
                                 ),
                                 html.Td(
@@ -65,12 +65,12 @@ app.layout = html.Div(
                                         id='n-person',
                                         type='number',
                                         value=10,
-                                        placeholder='Number of Person'
+                                        placeholder='Number of Persons'
                                     ),
                                     style={'width': '15%'}
                                 ),
                                 html.Td(
-                                    html.H5('Female Percentage'),
+                                    html.H5('Female Ratio (%)'),
                                     style={'width': '15%'}
                                 ),
                                 html.Td(
@@ -477,7 +477,7 @@ def update_figure(audio:str, stream_counter:int, start_stream_click:int):
     Input('claps', 'data')
 )
 def update_claps_figure(claps:np.ndarray):
-    return plot_soundwave(claps, 0, 'Clap Intensity Percentage')
+    return plot_soundwave(claps, 0, 'Clap Intensity (%)')
 
 
 @app.callback(
@@ -485,7 +485,7 @@ def update_claps_figure(claps:np.ndarray):
     Input('whistles', 'data')
 )
 def update_whistles_figure(whistles:np.ndarray):
-    return plot_soundwave(whistles, 0, 'Whistle Intensity Percentage')
+    return plot_soundwave(whistles, 0, 'Whistle Intensity (%)')
 
 
 @app.callback(
@@ -493,7 +493,7 @@ def update_whistles_figure(whistles:np.ndarray):
     Input('laughters', 'data')
 )
 def update_laughters_figure(laughters:np.ndarray):
-    return plot_soundwave(laughters, 0, 'Laughter Intensity Percentage')
+    return plot_soundwave(laughters, 0, 'Laughter Intensity (%)')
 
 
 @app.callback(
@@ -501,7 +501,7 @@ def update_laughters_figure(laughters:np.ndarray):
     Input('boos', 'data')
 )
 def update_boos_figure(boos:np.ndarray):
-    return plot_soundwave(boos, 0, 'Boo Intensity Percentage')
+    return plot_soundwave(boos, 0, 'Boo Intensity (%)')
 
 
 @app.callback(
