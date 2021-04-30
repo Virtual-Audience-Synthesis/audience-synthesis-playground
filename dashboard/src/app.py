@@ -1,6 +1,7 @@
 import os
 import dash
 import json
+import time
 import queue
 import numpy as np
 from scipy import signal
@@ -16,6 +17,10 @@ from dash.dependencies import Input, Output, State
 AUDIO_BLOCKSIZE = 50
 SR = 44100
 DURATION_IN_SEC = 10
+
+
+STREAM = None
+STREAM_START_TIME = None
 
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
@@ -291,7 +296,7 @@ def update_audio(n_clicks:int, n_person:int, female_ratio:float,
     n_person_clapping = int(n_person * clapping_intensity / 100)
     claps = utils_audio.spawnClaps(n_person_clapping, SR, DURATION_IN_SEC)
     
-    claps = min_max_normalize(claps)
+    claps = min_max_normalize(claps) * 2 #BUG Manual ampification
     #####
     
     # Spawn Whistles
@@ -420,12 +425,11 @@ def update_audio(n_clicks:int, n_person:int, female_ratio:float,
 @app.callback(
     Output('soundwave-fig', 'figure'),
     [
-        Input('audio', 'data'),
-        Input('stream-counter', 'data'),
-        Input('start-stream', 'n_clicks'),
+        Input('audio', 'data'), 
+        Input('stream-counter', 'data')
     ]
 )
-def update_figure(audio:str, stream_counter:int, start_stream_click:int):
+def update_figure(audio:np.ndarray, stream_counter:int):
     ctx = dash.callback_context
     input_id = ctx.triggered[0]['prop_id'].split('.')[0]
     
@@ -433,45 +437,8 @@ def update_figure(audio:str, stream_counter:int, start_stream_click:int):
         return plot_soundwave(audio, 0, 'Soundwave')
     elif input_id == 'stream-counter':
         return plot_soundwave(audio, stream_counter / SR * AUDIO_BLOCKSIZE, 'Soundwave')
-    elif input_id == 'start-stream':
-        def callback(outdata, frames, time, status):
-            if status:
-                print(status)
-                
-            try:
-                data = q.get_nowait()
-            except queue.Empty:
-                print('Buffer is empty: increase buffersize?')
-                raise sd.CallbackAbort
-            if len(data) < len(outdata):
-                outdata[:len(data)] = data
-                outdata[len(data):] = b'\x00' * (len(outdata) - len(data))
-                raise sd.CallbackStop
-            else:
-                outdata[:] = data
-        
-        fig = plot_soundwave(audio, stream_counter / SR * AUDIO_BLOCKSIZE, 'Soundwave')
-        
-        q = queue.Queue(maxsize=AUDIO_BLOCKSIZE)
-        
-        stream = sd.OutputStream(
-            samplerate=SR, 
-            channels=2, 
-            callback=callback, 
-            blocksize=AUDIO_BLOCKSIZE,
-            dtype='float32'
-        )
 
-        with stream:
-            data = audio[stream_counter:stream_counter + AUDIO_BLOCKSIZE]
-            while len(data) != 0:
-                stream_counter += AUDIO_BLOCKSIZE
-                q.put(data)
-                data = audio[stream_counter:stream_counter + AUDIO_BLOCKSIZE]
-                
-        return 0
-    
-    
+
 @app.callback(
     Output('claps-fig', 'figure'),
     Input('claps', 'data')
@@ -507,20 +474,76 @@ def update_boos_figure(boos:np.ndarray):
 @app.callback(
     Output('stream-counter', 'data'),
     [
-        Input('soundwave-fig', 'clickData'),
-        Input('stop-stream', 'n_clicks')
+        Input('audio', 'data'),
+        Input('start-stream', 'n_clicks'), 
+        Input('stop-stream', 'n_clicks'), 
+        Input('soundwave-fig', 'clickData')
+    ],
+    [
+        State('stream-counter', 'data')
     ]
 )
-def update_stream_counter(clickData:dict, n_clicks:str):
-    stream_counter = 0
-    if clickData is not None:
-        stream_counter = clickData['points'][0]['x'] / AUDIO_BLOCKSIZE * SR
-        
+def update_stream_counter(
+    audio:np.ndarray, 
+    start_stream_click:int, 
+    stop_stream_click:int, 
+    clickData:dict, 
+    stream_counter:int
+):
+    global STREAM, STREAM_START_TIME
+    
+    ctx = dash.callback_context
+    input_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    if input_id == 'audio':
+        stream_counter = 0
+    elif input_id == 'start-stream':
+        def callback(outdata, frames, time, status):
+            if status:
+                print(status)
+                
+            try:
+                data = q.get_nowait()
+            except queue.Empty:
+                print('Buffer is empty: increase buffersize?')
+                raise sd.CallbackAbort
+            if len(data) < len(outdata):
+                outdata[:len(data)] = data
+                outdata[len(data):] = b'\x00' * (len(outdata) - len(data))
+                raise sd.CallbackStop
+            else:
+                outdata[:] = data
+                
+        if STREAM is None or not STREAM.active:
+            q = queue.Queue(maxsize=AUDIO_BLOCKSIZE)
+            
+            STREAM_START_TIME = time.time()
+            
+            STREAM = sd.OutputStream(
+                samplerate=SR, 
+                channels=2, 
+                callback=callback, 
+                blocksize=AUDIO_BLOCKSIZE,
+                dtype='float32'
+            )
+            
+            with STREAM:
+                while stream_counter < len(audio):
+                    data = audio[stream_counter:stream_counter + AUDIO_BLOCKSIZE]
+                    q.put(data)
+                    stream_counter += AUDIO_BLOCKSIZE
+    elif input_id == 'stop-stream':
+        STREAM.stop()
+        stream_counter = int((time.time() - STREAM_START_TIME) * SR)
+    elif input_id == 'soundwave-fig':
+        if clickData is not None:
+            stream_counter = clickData['points'][0]['x'] / AUDIO_BLOCKSIZE * SR
+    
     return stream_counter
 
 
 def min_max_normalize(arr):
-    return (arr - np.min(arr)) / (np.max(arr) - np.min(arr))
+    return (arr - np.min(arr)) / (np.max(arr) - np.min(arr) + 1e-15)
 
 
 def plot_soundwave(audio:np.ndarray, current_x:int, title:str) -> go.Figure:
@@ -555,16 +578,6 @@ def plot_soundwave(audio:np.ndarray, current_x:int, title:str) -> go.Figure:
             )
         )
     
-    if title == 'Soundwave':
-        fig.add_shape(
-            type='line',
-            x0=current_x, y0=min(x) * (1 - (0.0005 * min(x) / abs(min(x) + eps))), 
-            x1=current_x, y1=max(x) * (1 + (0.0005 * max(x) / abs(max(x) + eps))),
-            line=dict(
-                width=3
-            )
-        )
-    
     fig.update_layout(
         title_text=title,
         height=200 if title == 'Soundwave' else 160,
@@ -596,12 +609,6 @@ def plot_soundwave(audio:np.ndarray, current_x:int, title:str) -> go.Figure:
     return fig
 
 
-# def stop_stream(n_clicks:int):
-#     global STREAM
-    
-#     STREAM.stop()
-    
-    
 if __name__ == '__main__':
     # TODO: debug=False
     app.run_server(
