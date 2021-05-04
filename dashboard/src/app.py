@@ -296,7 +296,7 @@ def update_audio(n_clicks:int, n_person:int, female_ratio:float,
     n_person_clapping = int(n_person * clapping_intensity / 100)
     claps = utils_audio.spawnClaps(n_person_clapping, SR, DURATION_IN_SEC)
     
-    claps = min_max_normalize(claps) * 2 #BUG Manual ampification
+    claps = min_max_normalize(claps)
     #####
     
     # Spawn Whistles
@@ -444,7 +444,7 @@ def update_figure(audio:np.ndarray, stream_counter:int):
     Input('claps', 'data')
 )
 def update_claps_figure(claps:np.ndarray):
-    return plot_soundwave(claps, 0, 'Clap Intensity (%)')
+    return plot_soundwave(claps, 0, 'Clapping Intensity (%)')
 
 
 @app.callback(
@@ -468,7 +468,7 @@ def update_laughters_figure(laughters:np.ndarray):
     Input('boos', 'data')
 )
 def update_boos_figure(boos:np.ndarray):
-    return plot_soundwave(boos, 0, 'Boo Intensity (%)')
+    return plot_soundwave(boos, 0, 'Booing Intensity (%)')
 
 
 @app.callback(
