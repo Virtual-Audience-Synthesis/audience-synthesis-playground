@@ -29,7 +29,7 @@ app = dash.Dash(
     update_title=None,
     external_stylesheets=external_stylesheets
 )
-app.title = 'Audio Synthesis'
+app.title = 'Virtual Audience Sound Synthesis'
 app.layout = html.Div(
     [
         html.Div(
