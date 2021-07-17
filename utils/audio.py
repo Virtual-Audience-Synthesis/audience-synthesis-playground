@@ -380,3 +380,82 @@ def removeNoise(hmm, noise_clusterID, chunk_sz, chunks, audio):
     # perform noise reduction
     reduced_noise = nr.reduce_noise(audio_clip=audio, noise_clip=noisy_part, verbose=False)
     return reduced_noise
+
+
+def spawnBoos(Nperson, Fs, t_len, load_path):
+    boos = np.load(load_path, allow_pickle=True)
+    Nsamples=round(Fs*t_len)#   # Total length of audio clip generated in seconds
+    NClap=round(Fs*1)#    # Length of audio signal for individual clap
+    RiseTime=round(0.032*Fs)#  # Exponentially rising attack segment of envelope 3.2 ms
+    DecayTime=round(0.052*Fs)#  # Exponentially rising attack segment of envelope 3.2 ms
+    Base=0.99**(44100/Fs)    ## Make shape of envelope independent from Fs
+    BaseDecay=Base**0.1    # # Slower decay of envelope to fake reverb
+    R=0.9           ## Pole radius of cavity resonator
+    Theta=np.pi/2.5     #   # Resonant frequency of cavity resonator: adjust for different hand clapping styles higher for flat hands 
+    ThetaStD=np.pi/6     #  # Vary hand clapping styles
+    b=np.array([1])            ## Cavity transfer function numerator - arbitary
+    t=np.arange(1, NClap+1).T#        # Index of signal for individual calp
+    opt1 = Base**(RiseTime-t)
+    opt2 = BaseDecay**(t-DecayTime)
+    env=np.where(opt1 < opt2, opt1, opt2)# # Generate envelope - fast rise, slow decay
+    AverageOOI=0.4      # # Time between clap in secs. Natural 0.4 Enthusiastic 0.3 Bored 0.6
+    StDevOOI=AverageOOI/16   # Time between claps varies with this st dev
+    Swell=1          # Applause increases over Swell seconds at the beginning
+    Fade=5           # Applause fades over Fade seconds at the end
+    outleft=np.zeros((Nsamples,))
+    outright=np.zeros((Nsamples,))
+    # create triangular distribution between for 150ms < OOI < 290ms
+    def tri():
+        return np.random.triangular(0.3, 0.4, 0.5)
+    affinity = 0.       #0 asynch, 1 in synch
+    K = 1.-affinity
+    c1_async = 1.3
+    c2_async = -.25
+    c1_sync = 3
+    c2_sync = 4
+    LeadOOI = 2 #s
+    KProfile = [0.5, 0.5, 0.75, 0.9, 0.9, 0.75, 0.5, 0.5, 0]
+    SyncProfile = [0, 0, 1, 1, 1, 1, 0, 0, 0]
+    Nsec = 0
+    def rand():
+        return np.random.uniform()
+    for i in range(1, Nperson+1):
+        a=np.array([1, -2*R*np.cos(Theta+(rand()-0.5)*ThetaStD), R**2]) # Cavity transfer function denominator
+        #  Onset=round(rand*AverageOOI*Fs)+1       # first clap onset uniformly distributed without clapping interval
+        Onset=round(rand()*Fs*Swell)+1          # first clap onset uniformly between 0 and Swell seconds
+        EndClap=Nsamples-rand()*Fs*Fade         # clapping stops, uniformly distributed over Fade seconds at the end
+        alpha=rand()                   # random distribute between left and right channel
+        beta=(i)**(-0.5)                # decay with distance. 
+        #OOI = round(Fs*(AverageOOI+randn*StDevOOI))# 
+        OOI = 1./(c1_async+K*c2_async)*tri()# 
+        while(Onset+NClap<EndClap):
+        #     x=np.random.random(size=(NClap,))*env # Generate single clap
+        #     y=signal.lfilter(b,a,x)   # Filter single clap
+            boo = boos[np.random.randint(0, len(boos))]
+            start = np.random.randint(0, max(1, len(boo) - Fs))
+            if len(boo) < Fs:
+                temp_boo = np.zeros((Fs, ))
+                temp_boo[: len(boo)] = boo
+                boo = temp_boo
+            
+            y = boo[start : start + Fs]#*env
+            outleft[Onset:Onset+NClap]=outleft[Onset:Onset+NClap]+beta*alpha*y
+            outright[Onset:Onset+NClap]=outright[Onset:Onset+NClap]+beta*(1-alpha)*y
+            delta_phase = OOI-LeadOOI/2
+            if (Onset+NClap) % (1*Fs)==0: #every second
+                Nsec = Nsec + 1
+                K = KProfile[Nsec]
+                if SyncProfile[Nsec]:
+                    if (delta_phase > 0):
+                        OOI=LeadOOI + K/2*(OOI-LeadOOI)-1/(c1_sync+c2_sync*K)*delta_phase #accelerate 
+                    if (delta_phase < 0):
+                        OOI=LeadOOI + K/2*(OOI-LeadOOI)+1/(c1_sync+c2_sync*K)*(LeadOOI-abs(delta_phase)) #decelerate
+                else:
+                    OOI=1/(c1_async+K*c2_async)*tri()
+            
+            Onset=Onset+round(Fs*OOI) 
+            #Onset=Onset+round(1/(c1_async+K*c2_async)*random(tri,1)*Fs)
+    
+    OutStereo=np.array([outleft,outright])
+    
+    return OutStereo
