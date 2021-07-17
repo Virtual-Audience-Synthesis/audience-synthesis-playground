@@ -363,52 +363,19 @@ def update_audio(n_clicks:int, n_person:int, female_ratio:float,
     #####
     
     # Spawn Female Boos
-    root_female_boo, root_female_boo_sr = utils_audio.loadAudio(
-        os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            'data', 
-            'female_boo.m4a'
-        ),
-        sr=SR
-    )
-    root_female_boo = root_female_boo[118000:-107000] # Manual cropping
-    
-    female_boos = np.zeros_like(claps)
     n_female_booing = int(n_female * booing_intensity / 100)
-    for _ in range(n_female_booing):
-        start = int(np.random.uniform(0, DURATION_IN_SEC * SR - root_female_boo.shape[0]))
-        direction = np.random.randint(0, 2)
-        boo = utils_audio.changePitch(root_female_boo, root_female_boo_sr, np.random.uniform(-3, 3))
-
-        female_boos[direction, start:start + len(boo)] += boo
-        
+    female_boos = utils_audio.spawnBoos(n_female_booing, SR, DURATION_IN_SEC, 'dashboard/data/female-boos.npy')
     female_boos = min_max_normalize(female_boos)
     #####
     
     # Spawn Male Boos
-    root_male_boo, root_male_boo_sr = utils_audio.loadAudio(
-        os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            'data', 
-            'male_boo.mp3'
-        ),
-        sr=SR
-    )
-    
-    male_boos = np.zeros_like(claps)
     n_male_booing = int(n_male * booing_intensity / 100)
-    for _ in range(n_male_booing):
-        start = int(np.random.uniform(0, DURATION_IN_SEC * SR - root_male_boo.shape[0]))
-        direction = np.random.randint(0, 2)
-        boo = utils_audio.changePitch(root_male_boo, root_male_boo_sr, np.random.uniform(-3, 3))
-
-        male_boos[direction, start:start + len(boo)] += boo
-        
+    male_boos = utils_audio.spawnBoos(n_male_booing, SR, DURATION_IN_SEC, 'dashboard/data/male-boos.npy')
     male_boos = min_max_normalize(male_boos)
     #####
     
     # Combine Boos
-    boos = female_boos + male_boos
+    boos = min_max_normalize(female_boos + male_boos)
     
     # Combine audios
     audio = (
