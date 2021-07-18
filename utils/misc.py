@@ -13,6 +13,7 @@ def change_docker_cwd(target_dir):
         os.chdir(Path(target_dir))
         print(f"Running in docker -> Change cwd to {target_dir}")
 
+
 # read csv file as data frame
 def readCSV(path):
     return pd.read_csv(path)
@@ -72,6 +73,7 @@ def getMaleList(df, N):
     # idx_list = random.shuffle(idx_list)
     return idx_list
 
+
 # create chunks with sliding window
 def slidingWindow(x, window, stride):
     # Warning: this function changes the view of the array but the locations in memory is the same!
@@ -81,6 +83,7 @@ def slidingWindow(x, window, stride):
         x.strides[-1],
     )
     return np.lib.stride_tricks.as_strided(x, shape=shape, strides=strides)
+
 
 # load precomputed feature vectors
 def loadFeatureDatabase(path):
