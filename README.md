@@ -46,6 +46,9 @@ Plotly dashboard is integrated as a playground for the audio synthesis. In the d
 # Change directory to the project root
 cd audience-synthesis-playground
 
+# Install requirements
+pip install -r dashboard/requirements.txt
+
 # Run the dashboard server
 python -m dashboard.src.app
 ```
