@@ -1,6 +1,10 @@
 # IDE
 .idea
 .vscode
+.DS_Store
+.vscode
+datasets
+dashboard/data/raw
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

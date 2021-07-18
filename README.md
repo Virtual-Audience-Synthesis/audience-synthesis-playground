@@ -36,6 +36,23 @@ docker-compose build
 docker-compose up
 ```
 
+### Dashboard
+Plotly dashboard is integrated as a playground for the audio synthesis. In the dashboard, the following options can be configured and new audio synthesized:
+- Number of people in the crowd
+- Female vs. male ratio of the crowd
+- Individual intensity level of clapping, laughing, whistling and booing
+
+```shell
+# Change directory to the project root
+cd audience-synthesis-playground
+
+# Install requirements
+pip install -r dashboard/requirements.txt
+
+# Run the dashboard server
+python -m dashboard.src.app
+```
+
 ## Links and Resources
 
 ### Unsupervised acoustic unit discovery for speech synthesis using discrete latent-variable neural networks

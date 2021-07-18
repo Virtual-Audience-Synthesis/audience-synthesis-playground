@@ -1,0 +1,105 @@
+SR = 44.1 kHZ
+DURATION = 10 sec
+
+
+Female ratio and enthusiasm percentage parameters updates the number of person performing that specific feedback type.
+
+####################
+# Pseudocode
+####################
+INPUTS: n_person, female_ratio, clapping_intensity, whistling_intensity, laughter_intensity, booing_intensity
+
+n_female = n_person * female_ratio
+n_male = n_person - n_female
+
+####################
+# Clapping
+####################
+n_person_clapping = n_person * clapping_intensity
+claps = spawnClaps(n_person_clapping, SR, DURAION)
+
+claps = min_max_normalize(claps)
+####################
+
+
+####################
+# Whistling
+####################
+root_whistle = load_from_prerecorded_file('whistle.wav')
+
+whistles = zero_like(claps) # empty array with the same shape with clappings
+n_person_whistling = n_person * whistling_intensity
+for person in n_person_whistling
+    start = uniform random between 0 and clapping length - root_whiste length
+    direction = uniform random (left or right)
+    pitch_factor = uniform random between -3 and 3
+    whistle = changePitch(root_whistle, SR, pitch_factor)
+    
+    whistles[direction, start : start + whistle length] += whistle
+end
+
+whistles = min_max_normalize(whistles)
+####################
+
+
+####################
+# Laughters
+####################
+n_person_laughing = n_person * laughter_intensity
+laughters = spawnLaughter(
+    n_person_laughing,
+    female_ratio,
+    prerecorded_female_laughter,
+    prerecorded_male_laughter,
+    stereo=True,
+    fs=22050, # Not SR, different SR is not supported yet, we resample to SR later
+    DURATION
+)
+
+laughters_resampled = signal.resample(laughters) # Resample to SR from 22050 HZ
+
+laughters_resampled = min_max_normalize(laughters_resampled)
+####################
+
+
+####################
+# Boos
+####################
+root_female_boo = load_from_prerecorded_file('female_boo.m4a')
+
+female_boos = zeros_like(claps)
+n_female_booing = n_female * booing_intensity
+for female in n_female_booing
+    start = uniform random between 0 and clapping length - root_female_boo length
+    direction = uniform random (left or right)
+    pitch_factor = uniform random between -3 and 3
+    female_boo = changePitch(root_female_boo, SR, pitch_factor)
+    
+    female_boos[direction, start : start + root_female_boo length] += female_boo
+end
+
+female_boos = min_max_normalize(female_boos)
+
+
+root_male_boo = load_from_prerecorded_file('male_boo.m4a')
+
+male_boos = zeros_like(claps)
+n_male_booing = n_male * booing_intensity
+for male in n_male_booing
+    start = uniform random between 0 and clapping length - root_male_boo length
+    direction = uniform random (left or right)
+    pitch_factor = uniform random between -3 and 3
+    male_boo = changePitch(root_male_boo, SR, pitch_factor)
+    
+    male_boos[direction, start : start + root_male_boo length] += male_boo
+end
+
+male_boos = min_max_normalize(male_boos)
+####################
+
+
+####################
+# Combine Feedbacks
+####################
+audio = claps + whistles + laughters_resampled + female_boos + male_boos
+####################
